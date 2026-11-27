@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   Leaf,
   X,
@@ -11,7 +18,15 @@ import {
   Smartphone,
 } from "lucide-react";
 import type { IScannerControls } from "@zxing/browser";
-import { useRegisterSW } from "virtual:pwa-register/react";
+import { createPwaInstall } from "./pwa-install";
+
+// Capture the browser event before the login screen or sidebar mounts.
+const installation = createPwaInstall(
+  window,
+  window.matchMedia("(display-mode: standalone)"),
+  (navigator as Navigator & { standalone?: boolean }).standalone,
+);
+if (import.meta.hot) import.meta.hot.dispose(() => installation.dispose());
 
 export const money = (n: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -145,7 +160,7 @@ export function Modal({
       previous?.focus();
     };
   }, []);
-  return (
+  return createPortal(
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
@@ -175,7 +190,8 @@ export function Modal({
         </header>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 export function Field({
@@ -284,56 +300,46 @@ export function Scanner({ onCode }: { onCode: (code: string) => void }) {
     </div>
   );
 }
-type InstallEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: string }>;
-};
-export function PwaControls() {
-  const [prompt, setPrompt] = useState<InstallEvent | null>(null);
-  const [help, setHelp] = useState(false);
-  const [installed, setInstalled] = useState(
-    window.matchMedia("(display-mode: standalone)").matches,
+export function PwaControls({
+  refresh,
+  onUpdate,
+}: {
+  refresh: boolean;
+  onUpdate: () => Promise<void>;
+}) {
+  const { installed, canPrompt, busy } = useSyncExternalStore(
+    installation.subscribe,
+    installation.getSnapshot,
   );
-  const {
-    needRefresh: [refresh],
-    updateServiceWorker,
-  } = useRegisterSW();
-  useEffect(() => {
-    const h = (e: Event) => {
-      e.preventDefault();
-      setPrompt(e as InstallEvent);
-    };
-    const installed = () => {
-      setInstalled(true);
-      setPrompt(null);
-    };
-    window.addEventListener("beforeinstallprompt", h);
-    window.addEventListener("appinstalled", installed);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", h);
-      window.removeEventListener("appinstalled", installed);
-    };
-  }, []);
+  const [help, setHelp] = useState(false);
   return (
     <>
       {!installed && (
         <button
           className="install-button"
+          disabled={busy}
           onClick={async () => {
-            if (prompt) {
-              await prompt.prompt();
-              setPrompt(null);
-            } else setHelp(true);
+            try {
+              if ((await installation.install()) === "unavailable") setHelp(true);
+            } catch {
+              setHelp(true);
+            }
           }}
         >
           <Download size={17} />
-          <span>Instalar EcoTrace</span>
+          <span>
+            {busy
+              ? "Abriendo instalación…"
+              : canPrompt
+                ? "Instalar EcoTrace"
+                : "Cómo instalar EcoTrace"}
+          </span>
         </button>
       )}
       {refresh && (
         <div className="update-banner">
           Hay una nueva versión disponible.
-          <button onClick={() => updateServiceWorker(true)}>Actualizar</button>
+          <button onClick={onUpdate}>Actualizar</button>
         </div>
       )}
       {help && (
@@ -342,16 +348,20 @@ export function PwaControls() {
             <Smartphone size={44} />
             <p>Instala EcoTrace para abrirla desde la pantalla de inicio.</p>
             <p>
-              <strong>Android o computador:</strong> abre el menú del navegador
-              y busca «Instalar aplicación» o «Agregar a la pantalla de inicio».
+              <strong>Android con Chrome:</strong> toca el menú ⋮ del navegador,
+              elige «Instalar y crear acceso directo» y luego «Instalar».
+              También puede aparecer como «Instalar aplicación» o «Agregar a
+              pantalla de inicio».
             </p>
             <p>
               <strong>iPhone:</strong> abre la página en Safari, pulsa Compartir
-              y luego «Agregar a pantalla de inicio».
+              y luego «Agregar a pantalla de inicio». Si aparece «Abrir como
+              app web», actívalo y pulsa «Agregar».
             </p>
             <small>
-              La opción aparece en navegadores compatibles cuando la aplicación
-              está publicada con HTTPS.
+              Después, abre EcoTrace desde su icono en la pantalla de inicio.
+              Si abriste el enlace dentro de otra aplicación, ábrelo primero
+              en Chrome o Safari.
             </small>
           </div>
         </Modal>

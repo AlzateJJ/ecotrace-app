@@ -159,6 +159,12 @@ Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre P
 - Referencias de los datos ficticios conservados en Railway: lote `LT-2026-92BF4707`, despacho `DSP-2026-DF722DFB`, certificado `CO-2026-B313BF31`. Las cuentas y el taller se identifican como **Prueba PMV**; no representan operaciones ni pagos reales. Manifest y service worker responden correctamente por HTTPS. También se comprobó en el navegador el registro público de un operario y su acceso inmediato a Acopio Centro · Demo.
 - Se corrigió y verificó en producción el desbordamiento horizontal de la tabla del operario en pantalla móvil. Se comprobó la actualización del service worker con el botón **Actualizar**, conservación de la sesión y cierre posterior; no se observaron errores de consola. La instalación y la cámara en un celular físico siguen pendientes.
 
+### Corrección del botón de instalación PWA
+
+El aviso de instalación ahora se captura desde la carga del cliente, antes del ingreso, y se conserva aunque el menú se desmonte. El service worker también se registra antes de autenticar. El botón dice **Instalar EcoTrace** cuando el navegador ofrece la instalación; en los demás casos muestra **Cómo instalar EcoTrace** con instrucciones manuales. No se puede forzar al navegador a ofrecer su diálogo nativo.
+
+Las ventanas usan un portal fuera del menú lateral para cubrir la pantalla y evitar que sus estilos oculten las instrucciones en celulares. La compilación y las cinco pruebas actuales del front pasan, incluidas tres pruebas nuevas para captura previa al ingreso, reintentos y modo instalado. En navegador se verificaron las instrucciones completas a 390 × 740, ausencia de desbordamiento, cierre con Escape y restauración del foco, además de apertura del formulario de entrega. La confirmación de instalación en Android físico depende de la prueba en el dispositivo.
+
 ### Validación manual histórica del 21 de noviembre de 2026
 
 Este recorrido corresponde a la versión anterior con códigos de acceso; ese mecanismo fue reemplazado por registro e ingreso con contraseña.

@@ -314,7 +314,7 @@ textarea {
   flex-shrink: 0;
 }
 @media (max-height: 800px) {
-  .sidebar .circular-note p,
+  .sidebar .circular-note > p,
   .sidebar .circular-note .tiny-leaf {
     display: none;
   }
@@ -2498,12 +2498,12 @@ dd {
 .install-help p {
   font-size: 0.85rem;
   line-height: 1.8;
-  color: #81956d;
+  color: #405449;
 }
 .install-help small {
   font-size: 0.75rem;
   line-height: 1.7;
-  color: #a5b594;
+  color: #586b60;
 }
 .mobile-menu,
 .mobile-close,

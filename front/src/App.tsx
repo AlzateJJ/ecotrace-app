@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRegisterSW } from "virtual:pwa-register/react";
 import {
   LayoutDashboard,
   Package,
@@ -78,6 +79,10 @@ const navs: Record<
   ],
 };
 export default function App() {
+  const {
+    needRefresh: [pwaRefresh],
+    updateServiceWorker,
+  } = useRegisterSW();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState("home");
@@ -285,7 +290,10 @@ export default function App() {
             </span>
             <strong>Un nuevo ciclo empieza contigo.</strong>
             <p>Conectamos personas para darle otra vida al PET.</p>
-            <PwaControls />
+            <PwaControls
+              refresh={pwaRefresh}
+              onUpdate={() => updateServiceWorker(true)}
+            />
           </div>
           <button className="sidebar-link" onClick={() => action("profile")}>
             <Settings size={19} />
