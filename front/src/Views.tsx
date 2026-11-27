@@ -440,7 +440,7 @@ export function WorkspaceView({
         <PageHeading
           eyebrow="UNA OPERACIÓN BIEN CONECTADA"
           title="Usuarios y sedes"
-          description="Habilita el acceso y vincula a cada persona con su función."
+          description="Consulta las cuentas registradas y administra las sedes de tu organización."
         >
           <button
             className="button secondary"
@@ -448,10 +448,6 @@ export function WorkspaceView({
           >
             <Building2 size={18} />
             Crear sede
-          </button>
-          <button className="button primary" onClick={() => action("newUser")}>
-            <Plus size={18} />
-            Crear usuario
           </button>
         </PageHeading>
         <section className="panel">

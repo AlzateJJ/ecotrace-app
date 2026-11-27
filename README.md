@@ -32,7 +32,7 @@ Copy-Item back/.env.example back/.env
 npm run dev
 ```
 
-Abrir <http://localhost:5173>. API en <http://127.0.0.1:3001/api/health>. El inicio aplica las migraciones y carga datos de ejemplo. Desde el acceso se puede elegir cada perfil, incluido el operario de planta y la administración.
+Abrir <http://localhost:5173>. API en <http://127.0.0.1:3001/api/health>. El inicio aplica las migraciones y carga datos de ejemplo. El acceso permite registrarse o iniciar sesión con correo y contraseña. La pestaña de demostración permite explorar los perfiles de ejemplo, incluido el operario de planta y la administración.
 
 Sin `DATABASE_URL`, el desarrollo usa **PGlite**, una versión embebida de PostgreSQL, y persiste en `back/.data/ecotrace`. Esto permite probar la app sin Docker ni una base remota. Producción exige una conexión PostgreSQL real y prohíbe el modo demo.
 
@@ -74,9 +74,9 @@ Los roles provienen de la sesión del servidor. Ocultar un botón en React no co
 | Operario en planta | Verifica el peso de los lotes enviados a su planta y confirma la recepción que genera los certificados.                                                        |
 | Empresa            | Datos de su organización, indicadores, meta de recuperación, trazabilidad, CSV y certificados PDF; registra comprobantes de pagos realizados externamente.     |
 | Capacitador        | Actividad de usuarios operativos de su organización, contacto, programación de talleres y asistencia a sus talleres. Sin acceso a pagos ni lotes individuales. |
-| Administración     | Crea usuarios y sedes de su organización, deshabilita accesos y consulta los datos de operación.                                                               |
+| Administración     | Administra sedes de su organización, deshabilita accesos y consulta los datos de operación.                                                               |
 
-El operario de planta usa el mismo rol `operario`, asociado a una sede de tipo `plant`. Esto cubre la confirmación del receptor sin permitir que el transportador certifique su propia entrega. El rol administrativo es un complemento operativo para habilitar cuentas y sedes.
+El operario de planta usa el mismo rol `operario`, asociado a una sede de tipo `plant`. Esto cubre la confirmación del receptor sin permitir que el transportador certifique su propia entrega. El rol administrativo es un complemento operativo para mantener sedes y deshabilitar cuentas; no interviene en el registro público.
 
 Flujo persistido:
 
@@ -92,46 +92,70 @@ El pesaje aceptado en acopio genera una sola liquidación y un solo movimiento d
 
 Los certificados tienen un código público de verificación limitado al material, peso, origen y destino, sin mostrar datos de pagos ni información privada del usuario. Son constancias de registros en EcoTrace, no certificaciones ambientales otorgadas por terceros.
 
+## Registro público sin correos
+
+Cada persona crea su cuenta con nombre, correo, contraseña y uno de cinco roles: reciclador, operario, transportador, empresa o capacitador. Entra inmediatamente; no requiere invitación, aprobación ni código de correo. El correo debe tener formato válido y ser único, pero **no se comprueba la existencia del buzón ni su propiedad**. No se envían mensajes y no se necesita Resend ni SMTP.
+
+La contraseña admite entre 15 y 128 caracteres, se guarda con scrypt y sal aleatoria y nunca se devuelve al cliente. Hay límites de solicitudes en registro e ingreso, protección de origen y sesiones revocables de 24 horas en cookies HttpOnly. No existe recuperación de contraseña por correo en este PMV.
+
+Todas las cuentas públicas ingresan a la organización indicada por `PUBLIC_REGISTRATION_ORG_ID` en el backend. La API no acepta que el cliente cambie esa organización, sus permisos o el estado de la cuenta. Elegir `empresa` da acceso a los datos y pagos de esa organización, conforme al modelo de roles autoseleccionados del PMV. No es un mecanismo para verificar la relación de una persona con una empresa; si se incorporan organizaciones independientes, será necesario definir su afiliación antes de abrir el registro a ellas.
+
+El operario selecciona un acopio o planta de esa misma organización. Las sedes físicas deben estar creadas antes de registrar operarios o recibir entregas. La administración mantiene ese catálogo; no crea las cuentas de los demás. El rol `admin` no aparece en el formulario y la API rechaza su registro público.
+
+La migración `002` conserva usuarios y operaciones anteriores, invalida las sesiones anteriores y elimina los códigos de acceso. Las cuentas previas sin contraseña no pueden reclamarse mediante registro: necesitan una asignación segura de contraseña por el responsable del despliegue. No se les asigna una contraseña compartida ni se sobrescriben sus datos. Los perfiles demo siguen disponibles exclusivamente en desarrollo.
+
 ## Trabajo sin conexión
 
 Después de ingresar y cargar información con conexión, se conserva una copia local por usuario. El reciclador puede preparar entregas sin red y enviarlas al reconectar; cada borrador tiene un identificador estable para evitar duplicados. El QR aparece cuando el servidor confirma la entrega. Los borradores pendientes sobreviven a una falla y solo se sincronizan para su usuario.
 
 Pesajes, pagos, despachos y asistencia requieren conexión. La primera autenticación también requiere red. El cierre de sesión requiere conexión para revocar la sesión del servidor; no se simula un cierre dejando la cookie activa. Los datos locales permanecen en el dispositivo para el uso sin conexión: para equipos compartidos debe acordarse una política de dispositivos antes de un piloto real.
 
-## Desplegar en Railway
+## Desplegar en Railway Hobby
 
-No se ha creado un proyecto remoto ni conectado una base de Railway desde esta entrega. Los Dockerfile están preparados para construir **desde la raíz del repositorio**, porque ambos servicios comparten el lockfile npm.
+Crear en un proyecto tres servicios: `front`, `back` y `Postgres`. Los dos servicios de aplicación usan este mismo repositorio y **Root Directory en la raíz**, porque comparten workspaces y lockfile. Elegir Dockerfile con la variable `RAILWAY_DOCKERFILE_PATH`; no usar `/front` o `/back` como directorio raíz ni configurar un comando de inicio adicional.
 
-Crear en el mismo proyecto y ambiente de Railway tres servicios: `front`, `back` y PostgreSQL. Front y back usan el mismo repositorio. Mantener Root Directory en la raíz; seleccionar builder Dockerfile y el archivo `front/Dockerfile` o `back/Dockerfile` respectivamente (también se puede configurar `RAILWAY_DOCKERFILE_PATH`). No establecer Root Directory en `/front` o `/back` con estos Dockerfile.
+| Variable | `front` | `back` |
+| --- | --- | --- |
+| `RAILWAY_DOCKERFILE_PATH` | `front/Dockerfile` | `back/Dockerfile` |
+| `PORT` | `3000` | `3001` |
+| `NODE_ENV` | `production` | `production` |
+| `BACKEND_URL` | `http://${{back.RAILWAY_PRIVATE_DOMAIN}}:3001` | — |
+| `APP_ORIGIN` | — | URL pública HTTPS del front, sin barra final |
+| `DATABASE_URL` | — | `${{Postgres.DATABASE_URL}}` (ajustar nombre del servicio) |
+| `PUBLIC_REGISTRATION_ORG_ID` | — | `org-ecotrace`, o ID de la organización existente |
+| `BOOTSTRAP_ORG_NAME` | — | Nombre de la organización |
+| `DEMO_MODE` | — | `false` |
+| `DEV_EMBEDDED_DB` | — | `false` |
 
-| Variable                  | Servicio `front`                               | Servicio `back`                                                        |
-| ------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| `RAILWAY_DOCKERFILE_PATH` | `front/Dockerfile`                             | `back/Dockerfile`                                                      |
-| `PORT`                    | `3000`                                         | `3001`                                                                 |
-| `BACKEND_URL`             | `http://${{back.RAILWAY_PRIVATE_DOMAIN}}:3001` | —                                                                      |
-| `NODE_ENV`                | `production`                                   | `production`                                                           |
-| `APP_ORIGIN`              | —                                              | URL pública HTTPS del front, sin barra final                           |
-| `DATABASE_URL`            | —                                              | `${{Postgres.DATABASE_URL}}` según el nombre de tu servicio PostgreSQL |
-| `DEMO_MODE`               | —                                              | `false`                                                                |
-| `DEV_EMBEDDED_DB`         | —                                              | `false`                                                                |
+1. Crear PostgreSQL con almacenamiento persistente y los dos servicios del repositorio. Usar una réplica por servicio para este PMV; los límites de solicitudes se mantienen en memoria por instancia.
+2. Generar el dominio público del front en el puerto 3000 y copiar ese origen a `APP_ORIGIN` del back. El back y PostgreSQL permanecen privados. Front reenvía `/api` al back y mantiene las cookies en el mismo origen.
+3. Configurar las variables anteriores. La organización se crea automáticamente al primer inicio. No cambiar su ID una vez que tenga datos. Configurar `DATABASE_SSL=true` solo si la conexión elegida exige TLS; se conserva la verificación de certificados.
+4. Para administrar sedes, configurar opcionalmente `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (mínimo 15 caracteres) y `BOOTSTRAP_ADMIN_NAME` **como secretos en Railway** antes del primer despliegue. No hay un correo predefinido. Una cuenta pública existente nunca se convierte automáticamente en administradora. Estas variables no actualizan ni recuperan contraseñas existentes.
+5. Desplegar back y front. Las migraciones se aplican al inicio dentro de una transacción con bloqueo, sin requerir la base durante el build. Configurar healthcheck del back en `/api/health` y del front en `/`; usar 120 segundos de margen para el primer inicio.
+6. Entrar con la cuenta administrativa, crear los centros y plantas reales y retirar de Railway las dos variables de credenciales de bootstrap. Los demás usuarios usan **Crear cuenta**, eligen su rol y acceden directamente.
+7. Comprobar registro, cierre e inicio de sesión, los flujos de cada rol y la instalación PWA desde el dominio HTTPS. La base debe conservar los registros después de un redespliegue.
 
-Publicar el dominio del **front** con puerto 3000. El back puede permanecer en la red privada; escucha IPv4/IPv6 en producción para admitir los dominios internos de Railway. El navegador accede a `/api` en el mismo origen del front, con cookies `HttpOnly`, `Secure` en producción y `SameSite=Strict`.
+El arranque no exige administrador para que recicladores, transportadores, empresas y capacitadores se registren. Los operarios necesitan sedes; por eso el catálogo forma parte de la preparación inicial de la operación.
 
-En el back configurar también:
+Hobby admite esta arquitectura. Configurar alertas/límite de gasto: la suscripción incluye consumo, pero el costo total depende de los recursos utilizados por los tres servicios. No se requiere contratar correo para este PMV. No se agregan archivos `railway.toml`/`railway.json`: la configuración se realiza en Railway con los Dockerfiles existentes.
 
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM` para enviar códigos de inicio de sesión por correo.
-- `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_NAME` y `BOOTSTRAP_ORG_NAME` para el primer acceso. Solo se crea este administrador si la base no tiene usuarios.
-- `DATABASE_SSL=true` únicamente si la conexión elegida exige TLS; la verificación de certificados permanece habilitada.
-
-Las migraciones se ejecutan al arrancar el back, dentro de una transacción con bloqueo. No necesitan conexión a la base durante la construcción de la imagen. Después del primer inicio, entrar con el correo del administrador y su código; crear sedes y usuarios. `GET /api/health` es el endpoint de comprobación del back. Variables secretas se configuran en Railway, no en Git.
-
-Fuentes de configuración: [Dockerfiles en Railway](https://docs.railway.com/builds/dockerfiles), [monorepos](https://docs.railway.com/deployments/monorepo) y [dominios privados](https://docs.railway.com/networking/domains/working-with-domains).
+Fuentes: [Dockerfiles](https://docs.railway.com/builds/dockerfiles), [monorepos](https://docs.railway.com/deployments/monorepo), [red privada](https://docs.railway.com/networking/private-networking) y [plan Hobby](https://docs.railway.com/pricing/plans).
 
 ## Validación y alcance de esta versión
 
-Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre PGlite, con solicitudes HTTP inyectadas en Fastify. Cubren autenticación y CSRF, separación entre organizaciones y propietarios, permisos por rol/sede, rechazo, pesaje, liquidación idempotente, cadena completa de custodia, emisión de PDF, asistencia y códigos de acceso de un solo uso. Las pruebas del front cubren persistencia de borradores, separación por usuario y reintentos. La conexión real con Railway, el envío SMTP y la instalación/cámara en dispositivos físicos deben probarse con la infraestructura configurada.
+Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre PGlite, con solicitudes HTTP inyectadas en Fastify. Cubren autenticación y CSRF, separación entre organizaciones y propietarios, permisos por rol/sede, rechazo, pesaje, liquidación idempotente, cadena completa de custodia, emisión de PDF, asistencia, registro público por rol, contraseñas, duplicados, acceso inmediato, cierre de sesión, límites de ingreso, cuentas deshabilitadas y migración de cuentas existentes. Las pruebas del front cubren persistencia de borradores, separación por usuario y reintentos. La conexión real con Railway y la instalación/cámara en dispositivos físicos deben probarse con la infraestructura configurada.
 
-### Validación manual del 21 de noviembre de 2026
+### Validación del 26 de noviembre de 2026
+
+- `npm run typecheck`, `npm run build` y las **16 pruebas** (14 backend + 2 front) pasan. La compilación genera manifest y service worker.
+- Las pruebas de API registran los cinco roles públicos, incluido operario de acopio y planta, y recorren entrega → pesaje → despacho → transporte → recepción → certificado → pago con esas cuentas nuevas. También verifican talleres, rechazos de escalamiento de permisos, duplicados, límites de ingreso y migraciones.
+- En navegador se comprobaron registro de reciclador y operario, selección de sede, rechazo de contraseñas distintas, ingreso posterior, cierre de sesión y persistencia al recargar. Formulario móvil de 390 × 844 sin desbordamiento horizontal; sin errores de consola observados.
+- Ambas imágenes Docker se construyeron y ejecutaron con `NODE_ENV=production`, un PostgreSQL 18 temporal y la API detrás del proxy del front. Se comprobó alta/ingreso/cierre de los cinco roles, cookies seguras, recursos PWA y conservación de cuentas al reiniciar. No se configuró proveedor de correo ni administrador para estas altas. Las sedes de prueba se cargaron como fixtures.
+- Los servidores y contenedores de prueba se detuvieron al terminar. La validación en Railway y en un celular físico sigue pendiente.
+
+### Validación manual histórica del 21 de noviembre de 2026
+
+Este recorrido corresponde a la versión anterior con códigos de acceso; ese mecanismo fue reemplazado por registro e ingreso con contraseña.
 
 Se ejecutó `npm run dev` con Vite en `http://localhost:5173` y la API con recarga automática en `http://127.0.0.1:3001`. Base local PGlite y datos de demostración; no representan operaciones reales. Se completaron estos recorridos en el navegador:
 
@@ -147,7 +171,7 @@ Se ejecutó `npm run dev` con Vite en `http://localhost:5173` y la API con recar
 
 Datos para localizar el recorrido en la demo: lote `LT-2026-1E191AE1`, despacho `DSP-2026-6F859AE2`, certificado `CO-2026-0C97E08D` y comprobante `QA-20261121-HP-30600`. Se conservaron los registros de prueba. La revisión terminó sin fallos funcionales en estos recorridos ni errores de consola observados; `npm test` volvió a pasar sus **9 pruebas** (7 de API y 2 de sincronización local).
 
-Esta comprobación cubre los flujos principales implementados, no todas las combinaciones posibles. Quedan pendientes las pruebas con Railway/PostgreSQL remoto, envío SMTP real, cámara, instalación en un celular físico y navegación realmente sin red; la cola sin conexión está cubierta por pruebas automatizadas, y la PWA compilada se revisó previamente en `localhost:3000`.
+Esta comprobación cubre los flujos principales implementados, no todas las combinaciones posibles. Quedan pendientes las pruebas con Railway/PostgreSQL remoto, cámara, instalación en un celular físico y navegación realmente sin red; la cola sin conexión está cubierta por pruebas automatizadas, y la PWA compilada se revisó previamente en `localhost:3000`.
 
 Esta entrega implementa el flujo central de los prototipos. Quedan para iteraciones posteriores: integración bancaria, SMS/WhatsApp automático, notificaciones push, mapas/GPS continuo, fotografías y almacenamiento de evidencias, básculas conectadas, canje de EcoPuntos, recuperación de borradores con errores de validación y gestión avanzada de tarifas. Los pagos actuales solo registran comprobantes externos; el botón WhatsApp abre una conversación sin enviarla. No se admiten recepciones parciales de despachos ni devoluciones posteriores al cierre en esta versión.
 

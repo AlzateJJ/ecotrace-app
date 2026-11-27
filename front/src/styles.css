@@ -3826,3 +3826,10 @@ td small,
     font-size: 0.75rem;
   }
 }
+
+.role-description {
+  margin: -4px 0 4px;
+  color: var(--text-secondary, #53665f);
+  font-size: 13px;
+  line-height: 1.5;
+}

@@ -426,15 +426,21 @@ function Login({
 }) {
   const [config, setConfig] = useState<{
     demo: boolean;
+    registration: boolean;
+    roles: Exclude<Role, "admin">[];
+    sites: { id: string; name: string; kind: "center" | "plant" }[];
     users: { id: string; name: string; role: Role; site: string | null }[];
-  }>({ demo: false, users: [] });
+  }>({ demo: false, registration: false, roles: [], sites: [], users: [] });
   const [email, setEmail] = useState("");
-  const [challenge, setChallenge] = useState("");
-  const [code, setCode] = useState("");
-  const [development, setDevelopment] = useState("");
+  const [signup, setSignup] = useState(false);
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [role, setRole] = useState<Exclude<Role, "admin">>("reciclador");
+  const [siteId, setSiteId] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(error);
-  const [showDemo, setShowDemo] = useState(true);
+  const [showDemo, setShowDemo] = useState(false);
   useEffect(() => {
     api("/auth/config")
       .then(setConfig)
@@ -579,76 +585,190 @@ function Login({
               onSubmit={(e) => {
                 e.preventDefault();
                 run(async () => {
-                  if (!challenge) {
-                    const r = await api("/auth/request-code", "POST", {
-                      email,
-                    });
-                    setChallenge(r.challenge);
-                    setDevelopment(r.developmentCode || "");
-                    setMessage(r.message);
-                  } else {
-                    await api("/auth/verify", "POST", { challenge, code });
-                    await onLogin();
-                  }
+                  if (signup && password !== confirmation)
+                    throw new Error("Las contraseñas no coinciden.");
+                  await api(signup ? "/auth/register" : "/auth/login", "POST", {
+                    email,
+                    password,
+                    ...(signup
+                      ? {
+                          name,
+                          role,
+                          ...(role === "operario" ? { siteId } : {}),
+                        }
+                      : {}),
+                  });
+                  setPassword("");
+                  setConfirmation("");
+                  await onLogin();
                 });
               }}
             >
+              <div className="login-tabs" aria-label="Acceso a tu cuenta">
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-pressed={!signup}
+                  className={!signup ? "active" : ""}
+                  onClick={() => {
+                    setSignup(false);
+                    setMessage("");
+                    setPassword("");
+                    setConfirmation("");
+                  }}
+                >
+                  Iniciar sesión
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !config.registration}
+                  aria-pressed={signup}
+                  className={signup ? "active" : ""}
+                  onClick={() => {
+                    setSignup(true);
+                    setMessage("");
+                    setPassword("");
+                    setConfirmation("");
+                  }}
+                >
+                  Crear cuenta
+                </button>
+              </div>
+              {signup && (
+                <Field label="Nombre completo">
+                  <input
+                    required
+                    minLength={2}
+                    maxLength={100}
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </Field>
+              )}
               <Field label="Correo electrónico">
                 <input
                   type="email"
                   required
-                  autoComplete="email"
+                  maxLength={254}
+                  autoComplete="username"
                   placeholder="tu@organizacion.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  disabled={!!challenge}
                 />
               </Field>
-              {challenge && (
-                <Field label="Código de verificación">
+              {signup && (
+                <>
+                  <Field label="Tu rol">
+                    <select
+                      value={role}
+                      onChange={(e) => {
+                        setRole(e.target.value as Exclude<Role, "admin">);
+                        setSiteId("");
+                      }}
+                    >
+                      {config.roles.map((r) => (
+                        <option key={r} value={r}>
+                          {roleNames[r]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <p className="role-description">
+                    {
+                      {
+                        reciclador:
+                          "Registra tus entregas y consulta tus pagos y EcoPuntos.",
+                        operario:
+                          "Recibe material y gestiona los lotes de tu centro o planta.",
+                        transportador:
+                          "Consulta tus recogidas y registra el avance de tus viajes.",
+                        empresa:
+                          "Consulta la operación de la organización y registra los pagos realizados.",
+                        capacitador:
+                          "Acompaña a los usuarios y organiza talleres de formación.",
+                      }[role]
+                    }
+                  </p>
+                  {role === "operario" && (
+                    <Field label="Centro de acopio o planta">
+                      <select
+                        required
+                        value={siteId}
+                        onChange={(e) => setSiteId(e.target.value)}
+                      >
+                        <option value="">Selecciona tu sede</option>
+                        {config.sites.map((site) => (
+                          <option key={site.id} value={site.id}>
+                            {site.name} ·{" "}
+                            {site.kind === "plant" ? "Planta" : "Acopio"}
+                          </option>
+                        ))}
+                      </select>
+                      {!config.sites.length && (
+                        <small>
+                          Aún no hay sedes disponibles. El registro de operarios
+                          estará disponible cuando se agregue un centro o
+                          planta.
+                        </small>
+                      )}
+                    </Field>
+                  )}
+                </>
+              )}
+              <Field
+                label="Contraseña"
+                hint={
+                  signup
+                    ? "Mínimo 15 caracteres; puedes usar una frase."
+                    : undefined
+                }
+              >
+                <input
+                  type="password"
+                  required
+                  minLength={signup ? 15 : undefined}
+                  maxLength={128}
+                  autoComplete={signup ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Field>
+              {signup && (
+                <Field label="Confirmar contraseña">
                   <input
-                    autoComplete="one-time-code"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
+                    type="password"
                     required
-                    placeholder="000000"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
+                    minLength={15}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    value={confirmation}
+                    onChange={(e) => setConfirmation(e.target.value)}
                   />
                 </Field>
               )}
-              {development && (
-                <p className="info-box">
-                  Código solo para desarrollo: <strong>{development}</strong>
-                </p>
-              )}
-              <button className="button primary full" disabled={busy}>
+              <button
+                className="button primary full"
+                disabled={
+                  busy ||
+                  (signup &&
+                    (!config.registration ||
+                      (role === "operario" && !config.sites.length)))
+                }
+              >
                 <Mail size={18} />
                 {busy
                   ? "Un momento…"
-                  : challenge
-                    ? "Entrar a mi espacio"
-                    : "Enviar código de acceso"}
+                  : signup
+                    ? "Registrarme y entrar"
+                    : "Entrar a mi espacio"}
               </button>
-              {challenge && (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => {
-                    setChallenge("");
-                    setCode("");
-                    setDevelopment("");
-                    setMessage("");
-                  }}
-                >
-                  Solicitar otro código
-                </button>
+              {signup && (
+                <p className="demo-footnote">
+                  Tu cuenta estará lista al registrarte. No necesitas un código
+                  por correo ni aprobación.
+                </p>
               )}
-              <p className="demo-footnote">
-                Tu organización debe habilitar tu cuenta antes del primer
-                ingreso.
-              </p>
             </form>
           )}
           {message && (

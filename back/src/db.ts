@@ -74,20 +74,28 @@ export async function migrate(db: DB) {
   );
   await db.transaction(async (tx) => {
     await tx.query("LOCK TABLE schema_migrations IN EXCLUSIVE MODE");
-    if (
-      !(
-        await tx.query(
-          "SELECT version FROM schema_migrations WHERE version='001'",
-        )
-      ).rows.length
-    ) {
+    for (const [version, file] of [
+      ["001", "001_initial.sql"],
+      ["002", "002_password_auth.sql"],
+    ]) {
+      if (
+        (
+          await tx.query(
+            "SELECT version FROM schema_migrations WHERE version=$1",
+            [version],
+          )
+        ).rows.length
+      )
+        continue;
       await tx.exec(
         await readFile(
-          new URL("../migrations/001_initial.sql", import.meta.url),
+          new URL(`../migrations/${file}`, import.meta.url),
           "utf8",
         ),
       );
-      await tx.query("INSERT INTO schema_migrations(version) VALUES ('001')");
+      await tx.query("INSERT INTO schema_migrations(version) VALUES ($1)", [
+        version,
+      ]);
     }
   });
 }

@@ -353,56 +353,6 @@ test("workshops and attendance use authorized enrolled users", async () => {
     200,
   );
 });
-test("OTP codes have attempt limits and are single use", async () => {
-  const c = (
-    await call("javier", "POST", "/api/auth/request-code", {
-      email: "javier@demo.ecotrace.co",
-    })
-  ).json();
-  assert.ok(c.developmentCode);
-  for (let i = 0; i < 5; i++)
-    assert.equal(
-      (
-        await call("javier", "POST", "/api/auth/verify", {
-          challenge: c.challenge,
-          code: "000000",
-        })
-      ).statusCode,
-      401,
-    );
-  assert.equal(
-    (
-      await call("javier", "POST", "/api/auth/verify", {
-        challenge: c.challenge,
-        code: c.developmentCode,
-      })
-    ).statusCode,
-    401,
-  );
-  const d = (
-    await call("javier", "POST", "/api/auth/request-code", {
-      email: "javier@demo.ecotrace.co",
-    })
-  ).json();
-  assert.equal(
-    (
-      await call("javier", "POST", "/api/auth/verify", {
-        challenge: d.challenge,
-        code: d.developmentCode,
-      })
-    ).statusCode,
-    200,
-  );
-  assert.equal(
-    (
-      await call("javier", "POST", "/api/auth/verify", {
-        challenge: d.challenge,
-        code: d.developmentCode,
-      })
-    ).statusCode,
-    401,
-  );
-});
 test("production does not expose demo login", async () => {
   const prod = await buildApp(db, {
     production: true,

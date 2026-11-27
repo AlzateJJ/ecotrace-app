@@ -342,7 +342,6 @@ export function Dialogs(p: Props) {
         </Field>
       </SimpleForm>
     );
-  if (d.type === "newUser") return <NewUser {...p} />;
   if (d.type === "toggleUser")
     return (
       <SimpleForm
@@ -1299,61 +1298,5 @@ function PersonDialog({
         </a>
       )}
     </Modal>
-  );
-}
-function NewUser(p: Props) {
-  const [role, setRole] = useState("reciclador");
-  return (
-    <SimpleForm
-      title="Habilitar un usuario"
-      onClose={p.onClose}
-      submitLabel="Crear acceso"
-      onSubmit={async (f) => {
-        await p.mutate("/users", "POST", {
-          name: f.get("name"),
-          email: f.get("email"),
-          role,
-          ...(role === "operario" ? { siteId: f.get("site") } : {}),
-          association: f.get("association") || "",
-        });
-        p.flash("Usuario habilitado. Puede ingresar con su correo.");
-        p.onClose();
-      }}
-    >
-      <Field label="Nombre completo">
-        <input required name="name" minLength={2} maxLength={200} />
-      </Field>
-      <Field label="Correo electrónico">
-        <input required name="email" type="email" />
-      </Field>
-      <Field label="Rol">
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          {Object.entries(roleNames).map(([key, name]) => (
-            <option value={key} key={key}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {role === "operario" && (
-        <Field label="Centro o planta asignada">
-          <select name="site" required>
-            <option value="">Seleccionar sede</option>
-            {p.data.sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )}
-      <Field label="Asociación (opcional)">
-        <input name="association" maxLength={150} />
-      </Field>
-      <p className="info-box">
-        El acceso queda limitado a tu organización y al rol asignado. La persona
-        recibirá un código cuando solicite iniciar sesión.
-      </p>
-    </SimpleForm>
   );
 }

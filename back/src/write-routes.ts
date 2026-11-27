@@ -634,56 +634,6 @@ export function registerWriteRoutes(app: FastifyInstance, db: DB) {
     ]);
     return { ok: true };
   });
-  app.post("/api/users", async (req, reply) => {
-    const u = req.user;
-    requireRole(u, ["admin"]);
-    const b = z
-      .object({
-        name: text,
-        email: z.email().transform((v) => v.toLowerCase().trim()),
-        role: z.enum([
-          "reciclador",
-          "operario",
-          "transportador",
-          "empresa",
-          "capacitador",
-          "admin",
-        ]),
-        siteId: z.string().optional(),
-        association: z.string().trim().max(150).default(""),
-      })
-      .strict()
-      .parse(req.body);
-    if (b.role === "operario" && !b.siteId)
-      throw new HttpError(400, "Asigna un centro o planta al operario.");
-    if (
-      b.siteId &&
-      !(
-        await db.query("SELECT id FROM sites WHERE id=$1 AND org_id=$2", [
-          b.siteId,
-          u.org_id,
-        ])
-      ).rows.length
-    )
-      throw new HttpError(400, "La sede no pertenece a tu organización.");
-    const uid = uuid();
-    await db.transaction(async (tx) => {
-      await tx.query(
-        "INSERT INTO users(id,org_id,site_id,name,email,role,association) VALUES($1,$2,$3,$4,$5,$6,$7)",
-        [
-          uid,
-          u.org_id,
-          b.siteId ?? null,
-          b.name,
-          b.email,
-          b.role,
-          b.association,
-        ],
-      );
-      await audit(tx, u, "user_created", uid);
-    });
-    return reply.code(201).send({ id: uid });
-  });
   app.patch<{ Params: { id: string } }>("/api/users/:id", async (req) => {
     const u = req.user;
     requireRole(u, ["admin"]);

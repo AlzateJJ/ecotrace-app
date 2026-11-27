@@ -2,13 +2,13 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import { createHash, randomBytes } from "node:crypto";
 import {
-  createHash,
-  randomBytes,
-  randomInt,
-  timingSafeEqual,
-} from "node:crypto";
-import nodemailer from "nodemailer";
+  emailSchema,
+  passwordSchema,
+  hashPassword,
+  verifyPassword,
+} from "./password.js";
 import { z } from "zod";
 import type { DB } from "./db.js";
 import { HttpError, safeUser, uuid, type User } from "./domain.js";
@@ -29,6 +29,7 @@ export async function buildApp(
     demo?: boolean;
     origin?: string;
     logger?: boolean;
+    registrationOrgId?: string;
   } = {},
 ) {
   const app = Fastify({
@@ -115,7 +116,25 @@ export async function buildApp(
     await db.query("SELECT 1");
     return { status: "ok" };
   });
+  const registrationOrgId = options.registrationOrgId;
+  const publicRoles = [
+    "reciclador",
+    "operario",
+    "transportador",
+    "empresa",
+    "capacitador",
+  ] as const;
   app.get("/api/auth/config", async () => ({
+    registration: !!registrationOrgId,
+    roles: publicRoles,
+    sites: registrationOrgId
+      ? (
+          await db.query(
+            "SELECT id,name,kind FROM sites WHERE org_id=$1 ORDER BY name",
+            [registrationOrgId],
+          )
+        ).rows
+      : [],
     demo: !!options.demo && !options.production,
     users:
       options.demo && !options.production
@@ -140,121 +159,82 @@ export async function buildApp(
     },
   );
   app.post(
-    "/api/auth/request-code",
-    { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
-    async (req) => {
-      const { email } = z
+    "/api/auth/register",
+    { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } },
+    async (req, reply) => {
+      if (!registrationOrgId)
+        throw new HttpError(503, "El registro no está disponible todavía.");
+      const b = z
         .object({
-          email: z
-            .email("Escribe un correo válido.")
-            .transform((v) => v.trim().toLowerCase()),
+          name: z
+            .string()
+            .trim()
+            .min(2, "Escribe tu nombre completo.")
+            .max(100),
+          email: emailSchema,
+          password: passwordSchema,
+          role: z.enum(publicRoles),
+          siteId: z.string().min(1).max(100).optional(),
         })
+        .strict()
         .parse(req.body);
-      const code = String(randomInt(100000, 1000000));
-      const challenge = uuid();
-      const exists =
-        (
-          await db.query(
-            "SELECT id FROM users WHERE email=$1 AND active=true",
-            [email],
-          )
-        ).rows.length > 0;
-      await db.query("DELETE FROM login_codes WHERE expires_at<now()");
-      await db.query("DELETE FROM sessions WHERE expires_at<now()");
-      if (exists) {
-        await db.transaction(async (tx) => {
-          await tx.query(
-            "UPDATE login_codes SET consumed=true WHERE email=$1",
-            [email],
+      if (b.role === "operario") {
+        if (
+          !b.siteId ||
+          !(
+            await db.query("SELECT id FROM sites WHERE id=$1 AND org_id=$2", [
+              b.siteId,
+              registrationOrgId,
+            ])
+          ).rows.length
+        )
+          throw new HttpError(
+            400,
+            "Selecciona un centro de acopio o planta disponible.",
           );
-          await tx.query(
-            "INSERT INTO login_codes(id,email,code_hash,expires_at) VALUES($1,$2,$3,$4)",
-            [
-              challenge,
-              email,
-              hash(challenge + code),
-              new Date(Date.now() + 10 * 60000),
-            ],
-          );
-        });
-        if (options.production || process.env.SMTP_HOST) {
-          const transport = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: Number(process.env.SMTP_PORT || 587),
-            secure: process.env.SMTP_SECURE === "true",
-            auth: process.env.SMTP_USER
-              ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-              : undefined,
-          });
-          await transport.sendMail({
-            from: process.env.SMTP_FROM,
-            to: email,
-            subject: "Tu código de acceso a EcoTrace",
-            text: `Tu código es ${code}. Vence en 10 minutos. Si no solicitaste este acceso, ignora este mensaje.`,
-          });
-        }
+      } else if (b.siteId) {
+        throw new HttpError(
+          400,
+          "Solo los operarios se vinculan a una sede al registrarse.",
+        );
       }
-      return {
-        challenge,
-        message: "Si tu correo está habilitado, recibirás un código de acceso.",
-        ...(!options.production && options.demo && exists
-          ? { developmentCode: code }
-          : {}),
-      };
+      const passwordHash = await hashPassword(b.password);
+      const userId = uuid();
+      await db.query(
+        "INSERT INTO users(id,org_id,site_id,name,email,role,password_hash) VALUES($1,$2,$3,$4,$5,$6,$7)",
+        [
+          userId,
+          registrationOrgId,
+          b.siteId ?? null,
+          b.name,
+          b.email,
+          b.role,
+          passwordHash,
+        ],
+      );
+      reply.code(201);
+      return session(userId, reply);
     },
   );
   app.post(
-    "/api/auth/verify",
-    { config: { rateLimit: { max: 15, timeWindow: "1 minute" } } },
+    "/api/auth/login",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
     async (req, reply) => {
-      const { challenge, code } = z
-        .object({
-          challenge: z.uuid(),
-          code: z.string().regex(/^\d{6}$/, "El código debe tener 6 dígitos."),
-        })
+      const b = z
+        .object({ email: emailSchema, password: z.string().min(1).max(128) })
+        .strict()
         .parse(req.body);
-      const userId = await db.transaction(async (tx) => {
-        const c = (
-          await tx.query("SELECT * FROM login_codes WHERE id=$1 FOR UPDATE", [
-            challenge,
-          ])
-        ).rows[0];
-        if (
-          !c ||
-          c.consumed ||
-          c.attempts >= 5 ||
-          new Date(c.expires_at).getTime() < Date.now()
+      const user = (
+        await db.query(
+          "SELECT id,active,password_hash FROM users WHERE lower(trim(email))=$1",
+          [b.email],
         )
-          return null;
-        await tx.query(
-          "UPDATE login_codes SET attempts=attempts+1 WHERE id=$1",
-          [challenge],
-        );
-        if (
-          !timingSafeEqual(
-            Buffer.from(c.code_hash),
-            Buffer.from(hash(challenge + code)),
-          )
-        )
-          return null;
-        const u = (
-          await tx.query(
-            "SELECT id FROM users WHERE email=$1 AND active=true",
-            [c.email],
-          )
-        ).rows[0];
-        if (!u) return null;
-        await tx.query("UPDATE login_codes SET consumed=true WHERE id=$1", [
-          challenge,
-        ]);
-        return u.id as string;
-      });
-      if (!userId)
-        throw new HttpError(
-          401,
-          "Código incorrecto, vencido o agotado. Solicita uno nuevo.",
-        );
-      return session(userId, reply);
+      ).rows[0];
+      const valid = await verifyPassword(b.password, user?.password_hash);
+      if (!valid || !user?.active)
+        throw new HttpError(401, "Correo o contraseña incorrectos.");
+      await db.query("DELETE FROM sessions WHERE expires_at<now()");
+      return session(user.id, reply);
     },
   );
   app.post("/api/logout", async (req, reply) => {
