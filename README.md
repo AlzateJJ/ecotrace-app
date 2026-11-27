@@ -157,6 +157,7 @@ Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre P
 - Los servidores y contenedores locales de prueba se detuvieron al terminar. Los tres servicios publicados en Railway permanecen activos.
 - Desde el dominio público de Railway se registraron y autenticaron los cinco roles (con un operario de acopio y otro de planta), se comprobaron cookies seguras, cierre de sesión, bloqueo del registro administrativo y ausencia de accesos demo. Se recorrió la cadena completa con 20 kg de prueba, se descargó el PDF, se verificó el certificado sin sesión y se registraron un comprobante externo y asistencia a un taller. Los límites por rol/sede rechazaron acciones no autorizadas.
 - Referencias de los datos ficticios conservados en Railway: lote `LT-2026-92BF4707`, despacho `DSP-2026-DF722DFB`, certificado `CO-2026-B313BF31`. Las cuentas y el taller se identifican como **Prueba PMV**; no representan operaciones ni pagos reales. Manifest y service worker responden correctamente por HTTPS. También se comprobó en el navegador el registro público de un operario y su acceso inmediato a Acopio Centro · Demo.
+- Se corrigió y verificó en producción el desbordamiento horizontal de la tabla del operario en pantalla móvil. Se comprobó la actualización del service worker con el botón **Actualizar**, conservación de la sesión y cierre posterior; no se observaron errores de consola. La instalación y la cámara en un celular físico siguen pendientes.
 
 ### Validación manual histórica del 21 de noviembre de 2026
 
