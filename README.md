@@ -124,6 +124,7 @@ Crear en un proyecto tres servicios: `front`, `back` y `Postgres`. Los dos servi
 | `DATABASE_URL` | — | `${{Postgres.DATABASE_URL}}` (ajustar nombre del servicio) |
 | `PUBLIC_REGISTRATION_ORG_ID` | — | `org-ecotrace`, o ID de la organización existente |
 | `BOOTSTRAP_ORG_NAME` | — | Nombre de la organización |
+| `MVP_SEED_SITES` | — | `true` para este PMV con sedes ficticias de Medellín |
 | `DEMO_MODE` | — | `false` |
 | `DEV_EMBEDDED_DB` | — | `false` |
 
@@ -135,7 +136,7 @@ Crear en un proyecto tres servicios: `front`, `back` y `Postgres`. Los dos servi
 6. Entrar con la cuenta administrativa, crear los centros y plantas reales y retirar de Railway las dos variables de credenciales de bootstrap. Los demás usuarios usan **Crear cuenta**, eligen su rol y acceden directamente.
 7. Comprobar registro, cierre e inicio de sesión, los flujos de cada rol y la instalación PWA desde el dominio HTTPS. La base debe conservar los registros después de un redespliegue.
 
-El arranque no exige administrador para que recicladores, transportadores, empresas y capacitadores se registren. Los operarios necesitan sedes; por eso el catálogo forma parte de la preparación inicial de la operación.
+Con `MVP_SEED_SITES=true`, una organización sin sedes recibe dos acopios de demostración (Centro y Belén) y una planta de demostración (Guayabal), todos ubicados de forma ficticia en Medellín. Quedan identificados como Demo; no son establecimientos reales. El seed no crea usuarios, lotes o pagos, no habilita accesos demo y no modifica catálogos existentes. Permite registrar también operarios desde el primer inicio, sin administrador. Para mantener después el catálogo se puede usar la cuenta administrativa opcional.
 
 Hobby admite esta arquitectura. Configurar alertas/límite de gasto: la suscripción incluye consumo, pero el costo total depende de los recursos utilizados por los tres servicios. No se requiere contratar correo para este PMV. No se agregan archivos `railway.toml`/`railway.json`: la configuración se realiza en Railway con los Dockerfiles existentes.
 
@@ -147,7 +148,7 @@ Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre P
 
 ### Validación del 26 de noviembre de 2026
 
-- `npm run typecheck`, `npm run build` y las **16 pruebas** (14 backend + 2 front) pasan. La compilación genera manifest y service worker.
+- `npm run typecheck`, `npm run build` y las **17 pruebas** (15 backend + 2 front) pasan. La compilación genera manifest y service worker.
 - Las pruebas de API registran los cinco roles públicos, incluido operario de acopio y planta, y recorren entrega → pesaje → despacho → transporte → recepción → certificado → pago con esas cuentas nuevas. También verifican talleres, rechazos de escalamiento de permisos, duplicados, límites de ingreso y migraciones.
 - En navegador se comprobaron registro de reciclador y operario, selección de sede, rechazo de contraseñas distintas, ingreso posterior, cierre de sesión y persistencia al recargar. Formulario móvil de 390 × 844 sin desbordamiento horizontal; sin errores de consola observados.
 - Ambas imágenes Docker se construyeron y ejecutaron con `NODE_ENV=production`, un PostgreSQL 18 temporal y la API detrás del proxy del front. Se comprobó alta/ingreso/cierre de los cinco roles, cookies seguras, recursos PWA y conservación de cuentas al reiniciar. No se configuró proveedor de correo ni administrador para estas altas. Las sedes de prueba se cargaron como fixtures.

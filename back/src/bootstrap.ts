@@ -2,6 +2,41 @@ import type { DB } from "./db.js";
 import { uuid } from "./domain.js";
 import { emailSchema, passwordSchema, hashPassword } from "./password.js";
 
+export async function seedMvpSites(db: DB, orgId: string) {
+  await db.transaction(async (tx) => {
+    await tx.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE", [
+      orgId,
+    ]);
+    if (
+      (await tx.query("SELECT id FROM sites WHERE org_id=$1 LIMIT 1", [orgId]))
+        .rows.length
+    )
+      return;
+    for (const [name, kind, address] of [
+      [
+        "Acopio Centro · Demo",
+        "center",
+        "Sector La Candelaria, Medellín, Colombia. Ubicación de demostración.",
+      ],
+      [
+        "Acopio Belén · Demo",
+        "center",
+        "Sector Belén, Medellín, Colombia. Ubicación de demostración.",
+      ],
+      [
+        "Planta Guayabal · Demo",
+        "plant",
+        "Sector Guayabal, Medellín, Colombia. Ubicación de demostración.",
+      ],
+    ]) {
+      await tx.query(
+        "INSERT INTO sites(id,org_id,name,kind,address) VALUES($1,$2,$3,$4,$5)",
+        [uuid(), orgId, name, kind, address],
+      );
+    }
+  });
+}
+
 export async function bootstrapOrganization(
   db: DB,
   orgId: string,

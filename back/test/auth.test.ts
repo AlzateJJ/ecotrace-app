@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { connectDatabase, migrate, type DB } from "../src/db.js";
 import { buildApp } from "../src/app.js";
-import { bootstrapOrganization } from "../src/bootstrap.js";
+import { bootstrapOrganization, seedMvpSites } from "../src/bootstrap.js";
 import { seedMaterials } from "../src/seed.js";
 import { hashPassword, verifyPassword } from "../src/password.js";
 
@@ -425,4 +425,31 @@ test("password migration preserves existing users and runs only once", async () 
   } finally {
     await legacy.close();
   }
+});
+
+test("optional Medellin mock sites are idempotent and preserve an existing catalog", async () => {
+  await bootstrapOrganization(db, "mvp-org", {});
+  await seedMvpSites(db, "mvp-org");
+  await seedMvpSites(db, "mvp-org");
+  const sites = (
+    await db.query("SELECT name,kind,address FROM sites WHERE org_id='mvp-org'")
+  ).rows;
+  assert.equal(sites.length, 3);
+  assert.equal(sites.filter((site: any) => site.kind === "plant").length, 1);
+  assert.ok(
+    sites.every(
+      (site: any) =>
+        site.name.includes("Demo") && site.address.includes("demostración"),
+    ),
+  );
+  assert.equal(
+    (await db.query("SELECT id FROM users WHERE org_id='mvp-org'")).rows.length,
+    0,
+  );
+  await seedMvpSites(db, "public-org");
+  assert.equal(
+    (await db.query("SELECT id FROM sites WHERE org_id='public-org'")).rows
+      .length,
+    2,
+  );
 });

@@ -2,7 +2,7 @@ import { connectDatabase, migrate } from "./db.js";
 import { databaseOptions, production, validateProduction } from "./config.js";
 import { seedDemo, seedMaterials } from "./seed.js";
 import { buildApp } from "./app.js";
-import { bootstrapOrganization } from "./bootstrap.js";
+import { bootstrapOrganization, seedMvpSites } from "./bootstrap.js";
 validateProduction();
 const db = await connectDatabase(databaseOptions());
 await migrate(db);
@@ -13,6 +13,8 @@ const registrationOrgId =
   process.env.PUBLIC_REGISTRATION_ORG_ID?.trim() ||
   (demo ? "org-demo" : "org-ecotrace");
 await bootstrapOrganization(db, registrationOrgId);
+if (process.env.MVP_SEED_SITES === "true")
+  await seedMvpSites(db, registrationOrgId);
 const app = await buildApp(db, {
   production,
   demo,
