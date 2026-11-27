@@ -172,7 +172,7 @@ export default function App() {
     if (!data || !online) return;
     const t = setInterval(() => {
       if (document.visibilityState === "visible") refresh().catch(() => {});
-    }, 20000);
+    }, 60000);
     return () => clearInterval(t);
   }, [data?.user.id, online, refresh]);
   const action: Action = (type, value) => {
