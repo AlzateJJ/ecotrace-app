@@ -942,6 +942,7 @@ main {
   color: #7b8c6a;
 }
 .table-wrap {
+  position: relative;
   overflow: auto;
 }
 table {

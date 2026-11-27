@@ -112,7 +112,9 @@ Pesajes, pagos, despachos y asistencia requieren conexión. La primera autentica
 
 ## Desplegar en Railway Hobby
 
-Crear en un proyecto tres servicios: `front`, `back` y `Postgres`. Los dos servicios de aplicación usan este mismo repositorio y **Root Directory en la raíz**, porque comparten workspaces y lockfile. Elegir Dockerfile con la variable `RAILWAY_DOCKERFILE_PATH`; no usar `/front` o `/back` como directorio raíz ni configurar un comando de inicio adicional.
+PMV publicado en **[EcoTrace](https://front-production-0cd6a330.up.railway.app)**. [Proyecto Railway](https://railway.com/project/afa529f5-0a75-4ae0-9651-605677ca963d), entorno `production`, con servicios `front`, `back` y `Postgres`. Solo el front tiene dominio público; la API y PostgreSQL se conectan por la red privada. No hay administrador ni proveedor de correo configurados: los usuarios usan **Crear cuenta** y eligen su rol.
+
+Para replicar el despliegue, crear en un proyecto esos tres servicios. Los dos servicios de aplicación usan este mismo repositorio y **Root Directory en la raíz**, porque comparten workspaces y lockfile. Elegir Dockerfile y su ruta en Settings → Build (o la variable `RAILWAY_DOCKERFILE_PATH`); no usar `/front` o `/back` como directorio raíz ni configurar comandos adicionales de compilación o inicio.
 
 | Variable | `front` | `back` |
 | --- | --- | --- |
@@ -130,10 +132,10 @@ Crear en un proyecto tres servicios: `front`, `back` y `Postgres`. Los dos servi
 
 1. Crear PostgreSQL con almacenamiento persistente y los dos servicios del repositorio. Usar una réplica por servicio para este PMV; los límites de solicitudes se mantienen en memoria por instancia.
 2. Generar el dominio público del front en el puerto 3000 y copiar ese origen a `APP_ORIGIN` del back. El back y PostgreSQL permanecen privados. Front reenvía `/api` al back y mantiene las cookies en el mismo origen.
-3. Configurar las variables anteriores. La organización se crea automáticamente al primer inicio. No cambiar su ID una vez que tenga datos. Configurar `DATABASE_SSL=true` solo si la conexión elegida exige TLS; se conserva la verificación de certificados.
+3. Configurar las variables anteriores usando los nombres definitivos de los servicios. Si se renombra un servicio, revisar las referencias: una referencia al nombre anterior puede resolverse vacía. La organización se crea automáticamente al primer inicio. No cambiar su ID una vez que tenga datos. Configurar `DATABASE_SSL=true` solo si la conexión elegida exige TLS; se conserva la verificación de certificados.
 4. Para administrar sedes, configurar opcionalmente `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (mínimo 15 caracteres) y `BOOTSTRAP_ADMIN_NAME` **como secretos en Railway** antes del primer despliegue. No hay un correo predefinido. Una cuenta pública existente nunca se convierte automáticamente en administradora. Estas variables no actualizan ni recuperan contraseñas existentes.
 5. Desplegar back y front. Las migraciones se aplican al inicio dentro de una transacción con bloqueo, sin requerir la base durante el build. Configurar healthcheck del back en `/api/health` y del front en `/`; usar 120 segundos de margen para el primer inicio.
-6. Entrar con la cuenta administrativa, crear los centros y plantas reales y retirar de Railway las dos variables de credenciales de bootstrap. Los demás usuarios usan **Crear cuenta**, eligen su rol y acceden directamente.
+6. Si se configuró una cuenta administrativa, entrar, crear los centros y plantas reales y retirar de Railway las dos variables de credenciales de bootstrap. Para el PMV publicado, `MVP_SEED_SITES=true` habilita el registro con las tres sedes ficticias sin necesitar ese paso. Los usuarios usan **Crear cuenta**, eligen su rol y acceden directamente.
 7. Comprobar registro, cierre e inicio de sesión, los flujos de cada rol y la instalación PWA desde el dominio HTTPS. La base debe conservar los registros después de un redespliegue.
 
 Con `MVP_SEED_SITES=true`, una organización sin sedes recibe dos acopios de demostración (Centro y Belén) y una planta de demostración (Guayabal), todos ubicados de forma ficticia en Medellín. Quedan identificados como Demo; no son establecimientos reales. El seed no crea usuarios, lotes o pagos, no habilita accesos demo y no modifica catálogos existentes. Permite registrar también operarios desde el primer inicio, sin administrador. Para mantener después el catálogo se puede usar la cuenta administrativa opcional.
@@ -144,7 +146,7 @@ Fuentes: [Dockerfiles](https://docs.railway.com/builds/dockerfiles), [monorepos]
 
 ## Validación y alcance de esta versión
 
-Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre PGlite, con solicitudes HTTP inyectadas en Fastify. Cubren autenticación y CSRF, separación entre organizaciones y propietarios, permisos por rol/sede, rechazo, pesaje, liquidación idempotente, cadena completa de custodia, emisión de PDF, asistencia, registro público por rol, contraseñas, duplicados, acceso inmediato, cierre de sesión, límites de ingreso, cuentas deshabilitadas y migración de cuentas existentes. Las pruebas del front cubren persistencia de borradores, separación por usuario y reintentos. La conexión real con Railway y la instalación/cámara en dispositivos físicos deben probarse con la infraestructura configurada.
+Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre PGlite, con solicitudes HTTP inyectadas en Fastify. Cubren autenticación y CSRF, separación entre organizaciones y propietarios, permisos por rol/sede, rechazo, pesaje, liquidación idempotente, cadena completa de custodia, emisión de PDF, asistencia, registro público por rol, contraseñas, duplicados, acceso inmediato, cierre de sesión, límites de ingreso, cuentas deshabilitadas y migración de cuentas existentes. Las pruebas del front cubren persistencia de borradores, separación por usuario y reintentos. La conexión real con Railway se comprobó desde el dominio público; la instalación y cámara en dispositivos físicos siguen pendientes.
 
 ### Validación del 26 de noviembre de 2026
 
@@ -152,7 +154,9 @@ Las pruebas de integración ejecutan las migraciones y reglas de negocio sobre P
 - Las pruebas de API registran los cinco roles públicos, incluido operario de acopio y planta, y recorren entrega → pesaje → despacho → transporte → recepción → certificado → pago con esas cuentas nuevas. También verifican talleres, rechazos de escalamiento de permisos, duplicados, límites de ingreso y migraciones.
 - En navegador se comprobaron registro de reciclador y operario, selección de sede, rechazo de contraseñas distintas, ingreso posterior, cierre de sesión y persistencia al recargar. Formulario móvil de 390 × 844 sin desbordamiento horizontal; sin errores de consola observados.
 - Ambas imágenes Docker se construyeron y ejecutaron con `NODE_ENV=production`, un PostgreSQL 18 temporal y la API detrás del proxy del front. Se comprobó alta/ingreso/cierre de los cinco roles, cookies seguras, recursos PWA y conservación de cuentas al reiniciar. No se configuró proveedor de correo ni administrador para estas altas. Las sedes de prueba se cargaron como fixtures.
-- Los servidores y contenedores de prueba se detuvieron al terminar. La validación en Railway y en un celular físico sigue pendiente.
+- Los servidores y contenedores locales de prueba se detuvieron al terminar. Los tres servicios publicados en Railway permanecen activos.
+- Desde el dominio público de Railway se registraron y autenticaron los cinco roles (con un operario de acopio y otro de planta), se comprobaron cookies seguras, cierre de sesión, bloqueo del registro administrativo y ausencia de accesos demo. Se recorrió la cadena completa con 20 kg de prueba, se descargó el PDF, se verificó el certificado sin sesión y se registraron un comprobante externo y asistencia a un taller. Los límites por rol/sede rechazaron acciones no autorizadas.
+- Referencias de los datos ficticios conservados en Railway: lote `LT-2026-92BF4707`, despacho `DSP-2026-DF722DFB`, certificado `CO-2026-B313BF31`. Las cuentas y el taller se identifican como **Prueba PMV**; no representan operaciones ni pagos reales. Manifest y service worker responden correctamente por HTTPS. También se comprobó en el navegador el registro público de un operario y su acceso inmediato a Acopio Centro · Demo.
 
 ### Validación manual histórica del 21 de noviembre de 2026
 
@@ -172,7 +176,7 @@ Se ejecutó `npm run dev` con Vite en `http://localhost:5173` y la API con recar
 
 Datos para localizar el recorrido en la demo: lote `LT-2026-1E191AE1`, despacho `DSP-2026-6F859AE2`, certificado `CO-2026-0C97E08D` y comprobante `QA-20261121-HP-30600`. Se conservaron los registros de prueba. La revisión terminó sin fallos funcionales en estos recorridos ni errores de consola observados; `npm test` volvió a pasar sus **9 pruebas** (7 de API y 2 de sincronización local).
 
-Esta comprobación cubre los flujos principales implementados, no todas las combinaciones posibles. Quedan pendientes las pruebas con Railway/PostgreSQL remoto, cámara, instalación en un celular físico y navegación realmente sin red; la cola sin conexión está cubierta por pruebas automatizadas, y la PWA compilada se revisó previamente en `localhost:3000`.
+Esta comprobación histórica cubre los flujos principales implementados, no todas las combinaciones posibles. Las pruebas posteriores con Railway/PostgreSQL remoto se describen arriba. Siguen pendientes cámara, instalación en un celular físico y navegación realmente sin red; la cola sin conexión está cubierta por pruebas automatizadas.
 
 Esta entrega implementa el flujo central de los prototipos. Quedan para iteraciones posteriores: integración bancaria, SMS/WhatsApp automático, notificaciones push, mapas/GPS continuo, fotografías y almacenamiento de evidencias, básculas conectadas, canje de EcoPuntos, recuperación de borradores con errores de validación y gestión avanzada de tarifas. Los pagos actuales solo registran comprobantes externos; el botón WhatsApp abre una conversación sin enviarla. No se admiten recepciones parciales de despachos ni devoluciones posteriores al cierre en esta versión.
 
